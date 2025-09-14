@@ -10,11 +10,9 @@ def generate_timesheet(emp_name, month, year, leaves, holidays):
     month_days = list(range(1, calendar.monthrange(year, month)[1] + 1))
     weekdays = [calendar.day_name[calendar.weekday(year, month, d)][:3] for d in month_days]
 
-    # Create header row: e.g., "1 Mon"
     headers = [f"{d} {w}" for d, w in zip(month_days, weekdays)]
     df = pd.DataFrame(columns=["Emp Name"] + headers)
 
-    # Fill employee row
     row = {"Emp Name": emp_name}
     for d, w in zip(month_days, weekdays):
         if w in ["Sat", "Sun"]:
@@ -30,13 +28,16 @@ def generate_timesheet(emp_name, month, year, leaves, holidays):
 
 # Function to style and export Excel
 def to_excel_bytes(df, month_name, year, po_number, project_id, tata_manager, client_manager):
+    # Step 1: Write DataFrame to BytesIO using pandas
     output = BytesIO()
-    with pd.ExcelWriter(output, engine="openpyxl") as writer:
-        df.to_excel(writer, sheet_name="Timesheet", index=False, startrow=4)
+    df.to_excel(output, engine="openpyxl", index=False, startrow=4)
+    output.seek(0)  # Reset the pointer
 
+    # Step 2: Load workbook from BytesIO
     wb = load_workbook(output)
     ws = wb.active
 
+    # Step 3: Modify workbook using openpyxl
     # Header info (PO & Project ID)
     ws["J1"] = f"PO Number: {po_number}"
     ws["J2"] = f"Project ID: {project_id}"
@@ -83,16 +84,17 @@ def to_excel_bytes(df, month_name, year, po_number, project_id, tata_manager, cl
     ws[f"B{sign_row+2}"] = f" Name: {tata_manager}"
     ws[f"B{sign_row+3}"] = " Signature: ___________"
     ws[f"B{sign_row+4}"] = " Date: _______________"
-
     ws[f"H{sign_row}"] = "----------------------------------"
     ws[f"H{sign_row+1}"] = " Client Manager"
     ws[f"H{sign_row+2}"] = f" Name: {client_manager}"
     ws[f"H{sign_row+3}"] = " Signature: ___________"
     ws[f"H{sign_row+4}"] = " Date: _______________"
 
-    wb.save(output)
-    output.seek(0)
-    return output.getvalue()
+    # Step 4: Save workbook to fresh BytesIO
+    final_output = BytesIO()
+    wb.save(final_output)
+    final_output.seek(0)
+    return final_output.getvalue()
 
 # ---------------- Streamlit App ----------------
 st.title("📊 Automated Timesheet Generator")
@@ -111,7 +113,6 @@ holidays = st.text_input("Holiday Days (comma separated)", "10, 25")
 
 leave_days = [int(x.strip()) for x in leaves.split(",") if x.strip().isdigit()]
 holiday_days = [int(x.strip()) for x in holidays.split(",") if x.strip().isdigit()]
-
 df_timesheet = generate_timesheet(emp_name, month, year, leave_days, holiday_days)
 
 # Billable calculation
@@ -124,3 +125,4 @@ month_name = calendar.month_name[month]
 if st.button("Generate Timesheet Excel"):
     excel_bytes = to_excel_bytes(df_timesheet, month_name, year, po_number, project_id, tata_manager, client_manager)
     st.download_button("📥 Download Timesheet", excel_bytes, file_name=f"Timesheet_{month_name}_{year}.xlsx")
+
